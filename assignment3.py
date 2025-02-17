@@ -2,69 +2,63 @@ import argparse
 import urllib.request
 import csv
 import re
-from collections import Counter
+import collections
+from datetime import datetime
 
-def fetch_log_data(url):
-    with urllib.request.urlopen(url) as response:
-        return response.read().decode('utf-8').splitlines()
+def download_file(url):
+    filename = "weblog.csv"
+    urllib.request.urlretrieve(url, filename)
+    return filename
 
-def parse_log_entries(log_entries):
-    reader = csv.reader(log_entries)
-    structured_data = []
+def process_csv(filename):
     
-    for record in reader:
-        if len(record) == 5:
-            structured_data.append({
-                "file_path": record[0],
-                "timestamp": record[1],
-                "user_agent": record[2],
-                "http_status": record[3],
-                "file_size": record[4]
-            })
-    return structured_data
+    data = []
+    with open(filename, 'r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            data.append(row)
+    return data
 
-def analyze_image_requests(entries):
-    image_regex = re.compile(r'.*\.(jpg|gif|png)$', re.IGNORECASE)
+def count_image_requests(data):
     
-    total_hits = len(entries)
-    image_hits = sum(1 for item in entries if image_regex.match(item["file_path"]))
-    
-    proportion = (image_hits / total_hits) * 100 if total_hits > 0 else 0
-    print(f"Image-related requests constitute {proportion:.2f}% of total requests.")
+    image_pattern = re.compile(r".*\.(jpg|png|gif)$", re.IGNORECASE)
+    total_requests = len(data)
+    image_requests = sum(1 for row in data if image_pattern.match(row[0]))
+    percentage = (image_requests / total_requests) * 100
+    print(f"Image requests account for {percentage:.2f}% of all requests")
 
-def identify_top_browser(entries):
-    browser_signatures = {
-        "Firefox": re.compile(r'Firefox'),
-        "Chrome": re.compile(r'Chrome'),
-        "IE": re.compile(r'MSIE|Trident'),
-        "Safari": re.compile(r'Safari(?!.*Chrome)')
-    }
-    
-    browser_distribution = Counter()
-    
-    for item in entries:
-        agent_info = item["user_agent"]
-        for browser, regex in browser_signatures.items():
-            if regex.search(agent_info):
-                browser_distribution[browser] += 1
-                break
-    
-    top_browser = browser_distribution.most_common(1)
-    if top_browser:
-        print(f"Leading browser of the day: {top_browser[0][0]}")
-    else:
-        print("No valid browser data detected.")
+def find_popular_browser(data):
+    """Finds the most used browser using regular expressions."""
+    browser_counts = collections.Counter()
 
-def execute():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--url', required=True, help='Provide the URL for the log file')
-    args = parser.parse_args()
+    for row in data:
+        user_agent = row[2].lower()
+
+        if re.search(r"chrome", user_agent):
+            browser_counts["Chrome"] += 1
+        if re.search(r"firefox", user_agent):
+            browser_counts["Firefox"] += 1
+        if re.search(r"internet explorer", user_agent):
+            browser_counts["Internet Explorer"] += 1
+        if re.search(r"safari", user_agent) and not re.search(r"chrome", user_agent):
+            browser_counts["Safari"] += 1
+
+    most_common = browser_counts.most_common(1)[0]
+    print(f"The most popular browser is {most_common[0]} with {most_common[1]} hits.")
+
+
+def main(url):
+    print(f"Running main with URL = {url}...")
+    filename = download_file(url)
+    data = process_csv(filename)
+
+    count_image_requests(data)
+    find_popular_browser(data)
     
-    log_entries = fetch_log_data(args.url)
-    structured_entries = parse_log_entries(log_entries)
-    
-    analyze_image_requests(structured_entries)
-    identify_top_browser(structured_entries)
 
 if __name__ == "__main__":
-    execute()
+    """Main entry point"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--url", help="URL to the datafile", type=str, required=True)
+    args = parser.parse_args()
+    main(args.url)
